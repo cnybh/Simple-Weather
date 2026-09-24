@@ -1,0 +1,22 @@
+{
+  "runtimeOptions": {
+    "tfm": "net8.0",
+    "framework": {
+      "name": "Microsoft.NETCore.App",
+      "version": "8.0.0"
+    },
+    "configProperties": {
+      "System.Diagnostics.Tracing.EventSource.IsSupported": false,
+      "System.GC.Concurrent": false,
+      "System.GC.Server": false,
+      "System.Globalization.Invariant": false,
+      "System.Reflection.Metadata.MetadataUpdater.IsSupported": false,
+      "System.Reflection.NullabilityInfoContext.IsSupported": false,
+      "System.Resources.UseSystemResourceKeys": true,
+      "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false,
+      "System.Runtime.TieredCompilation": true,
+      "System.Runtime.TieredPGO": true,
+      "System.Threading.Thread.EnableAutoreleasePool": false
+    }
+  }
+}

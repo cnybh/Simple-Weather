@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "kzkBW68VJWg=",
+  "success": true,
+  "projectFilePath": "D:\\00. Personal Files\\Vibe Coding\\Simple Weather\\code\\SimpleWeather.Native.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\yang.bohang\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
+    "C:\\Users\\yang.bohang\\.nuget\\packages\\system.drawing.common\\8.0.0\\system.drawing.common.8.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

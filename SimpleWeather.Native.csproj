@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>SimpleWeather</AssemblyName>
+    <RootNamespace>SimpleWeather</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.0.0</Version>
+    <Product>Simple Weather</Product>
+    <Company>Bohang</Company>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- Native build: no WPF, no WinForms. Only the BCL plus GDI+ for rasterising. -->
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+
+    <!-- Working-set tuning for a long-running taskbar widget. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>true</TieredPGO>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <NullabilityInfoContextSupport>false</NullabilityInfoContextSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- GDI+ : the only realistic way to rasterise anti-aliased vector art with alpha
+         into a 32bpp surface. Plain GDI does not write the alpha channel. -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- The application icon sits next to the sources, so this folder builds on its own.
+       ApplicationIcon stamps it onto the executable (which is also what gives every window its
+       title-bar icon, since Windows falls back to the module icon) and EmbeddedResource packs the
+       same frames so the About box can draw the logo at 64px. -->
+  <ItemGroup>
+    <None Include="logo.ico" />
+    <EmbeddedResource Include="logo.ico" />
+  </ItemGroup>
+
+</Project>

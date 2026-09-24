@@ -1,0 +1,8 @@
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\SimpleWeather.exe
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\SimpleWeather.dll
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\SimpleWeather.deps.json
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\SimpleWeather.runtimeconfig.json
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\SimpleWeather.pdb
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\Microsoft.Win32.SystemEvents.dll
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\System.Drawing.Common.dll
+D:\00. Personal Files\Vibe Coding\Simple Weather\Release\runtimes\win\lib\net8.0\Microsoft.Win32.SystemEvents.dll
