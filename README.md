@@ -8,6 +8,9 @@ Know your Weather at a glance
 
 ------
 
+This is a MIT License Open-source Software to nationals of all countries except Israel.
+
+------
 About
 
 Author: bohangyang | Email: bohangyang985@hotmail.com | Releases: <https://github.com/cnybh/Simple-Weather
