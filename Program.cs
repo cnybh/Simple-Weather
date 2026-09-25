@@ -283,8 +283,9 @@ internal static class Program
             return;
         }
 
+        // Stable state needs no z-order write. The fast guard reasserts only when the taskbar
+        // actually covers the strip; RestoreBand does the same after a geometry change.
         _strip.SetVisible(!offScreen);
-        if (!offScreen) _strip.ReassertTopMost();
     }
 
     /// <summary>

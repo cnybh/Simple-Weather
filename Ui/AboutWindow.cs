@@ -372,7 +372,7 @@ internal sealed class AboutWindow : IDisposable
 
     /// <summary>
     /// Version, read from the assembly rather than written down, so the box cannot drift from the
-    /// build. <c>Version</c> in the project file is 1.0.0.
+    /// build. <c>Version</c> in the project file is 1.0.1.
     /// </summary>
     internal static string ProductVersion
     {
@@ -382,7 +382,7 @@ internal sealed class AboutWindow : IDisposable
             string? informational = assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
-            return informational ?? assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+            return informational ?? assembly.GetName().Version?.ToString(3) ?? "1.0.1";
         }
     }
 

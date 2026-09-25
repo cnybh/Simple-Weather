@@ -67,7 +67,7 @@ public static class Loc
         ["Settings.CurrentLocation"] = "Current Location Setting",
         ["Settings.AboutButton"] = "About",
         ["Settings.ReleasePage"] = "Software Release Page",
-        ["Settings.AboutText"] = "Weather data by Open-Meteo. Location by ip-api. Both are free and need no API key.",
+        ["Settings.AboutText"] = "Weather data by Open-Meteo. Location by ipwho.is. Both are free and need no API key.",
         ["About.Title"] = "Simple Weather by Bohang",
         ["About.Version"] = "Software Version",
         ["About.Ok"] = "OK",
@@ -75,7 +75,7 @@ public static class Loc
 
     private static readonly Dictionary<string, string> Zh = new(StringComparer.Ordinal)
     {
-        ["App.Name"] = "简易天气",
+        ["App.Name"] = "Simple Weather",
         ["Weather.Clear"] = "晴",
         ["Weather.MainlyClear"] = "晴间多云",
         ["Weather.PartlyCloudy"] = "多云",
@@ -108,7 +108,7 @@ public static class Loc
         ["Status.Locating"] = "正在定位\u2026",
         ["Status.Loading"] = "正在获取天气\u2026",
         ["Status.Error"] = "无法获取天气",
-        ["Settings.Title"] = "简易天气 \u2013 设置",
+        ["Settings.Title"] = "Simple Weather \u2013 设置",
         ["Settings.General"] = "常规",
         ["Settings.Units"] = "单位",
         ["Settings.Location"] = "位置",
@@ -131,7 +131,7 @@ public static class Loc
         ["Settings.CurrentLocation"] = "当前位置设置",
         ["Settings.AboutButton"] = "关于",
         ["Settings.ReleasePage"] = "软件发布页",
-        ["Settings.AboutText"] = "天气数据来自 Open-Meteo，定位数据来自 ip-api，均为免费且无需密钥。",
+        ["Settings.AboutText"] = "天气数据来自 Open-Meteo，定位数据来自 ipwho.is，均为免费且无需密钥。",
         ["About.Title"] = "Simple Weather by Bohang",
         ["About.Version"] = "软件版本",
         ["About.Ok"] = "确定",

@@ -6,10 +6,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>SimpleWeather</AssemblyName>
+    <AssemblyName>Simple Weather</AssemblyName>
     <RootNamespace>SimpleWeather</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Product>Simple Weather</Product>
     <Company>Bohang</Company>
     <ApplicationIcon>logo.ico</ApplicationIcon>

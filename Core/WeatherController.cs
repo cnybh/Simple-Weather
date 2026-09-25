@@ -76,42 +76,65 @@ internal sealed class WeatherController : IDisposable
         StatusKey = Location is null ? "Status.Locating" : "Status.Loading";
         Notify();
 
+        const int MaxAttempts = 3;
+        Exception? lastError = null;
+
         try
         {
-            GeoLocation location;
-
-            if (Settings.UseManualLocation && Settings.CoordinatesValid)
+            for (int attempt = 1; attempt <= MaxAttempts; attempt++)
             {
-                location = new GeoLocation(Settings.ManualLocationName, string.Empty, string.Empty,
-                    Settings.ManualLatitude, Settings.ManualLongitude, "auto");
-            }
-            else if (Location is not null && !forceLocate)
-            {
-                location = Location;
-            }
-            else
-            {
-                location = await _service.LocateAsync(token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
+
+                try
+                {
+                    GeoLocation location;
+
+                    if (Settings.UseManualLocation && Settings.CoordinatesValid)
+                    {
+                        location = new GeoLocation(Settings.ManualLocationName, string.Empty, string.Empty,
+                            Settings.ManualLatitude, Settings.ManualLongitude, "auto");
+                    }
+                    else if (Location is not null && !forceLocate)
+                    {
+                        location = Location;
+                    }
+                    else
+                    {
+                        location = await _service.LocateAsync(token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+                    }
+
+                    Location = location;
+                    StatusKey = "Status.Loading";
+                    Notify();
+
+                    Snapshot = await _service.GetAsync(location, token).ConfigureAwait(false);
+                    StatusKey = string.Empty;
+                    Log.Write($"weather ok: {location.DisplayName} {Snapshot.TemperatureC:0.#}C code={Snapshot.CurrentCode}");
+                    return;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    lastError = ex;
+
+                    if (attempt == MaxAttempts) break;
+
+                    // Geolocation providers fail intermittently (rate limits, transient network
+                    // faults). Waiting for the next scheduled refresh — up to 60 minutes — is what
+                    // made a single failure look like a permanently stuck "Locating…" widget.
+                    TimeSpan backoff = TimeSpan.FromSeconds(attempt * 3);
+                    Log.Write($"weather fetch attempt {attempt}/{MaxAttempts} failed: {ex.Message}; retrying in {backoff.TotalSeconds:0}s");
+                    await Task.Delay(backoff, token).ConfigureAwait(false);
+                }
             }
 
-            Location = location;
-            StatusKey = "Status.Loading";
-            Notify();
-
-            Snapshot = await _service.GetAsync(location, token).ConfigureAwait(false);
-            StatusKey = string.Empty;
-            Log.Write($"weather ok: {location.DisplayName} {Snapshot.TemperatureC:0.#}C code={Snapshot.CurrentCode}");
+            StatusKey = "Status.Error";
+            ErrorDetail = lastError?.Message;
+            Log.Write("weather fetch failed after retries", lastError!);
         }
         catch (OperationCanceledException)
         {
             return;
-        }
-        catch (Exception ex)
-        {
-            StatusKey = "Status.Error";
-            ErrorDetail = ex.Message;
-            Log.Write("weather fetch failed", ex);
         }
         finally
         {

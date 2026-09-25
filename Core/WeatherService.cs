@@ -62,54 +62,186 @@ public sealed record WeatherSnapshot(
     IReadOnlyList<DailyForecast> Days);
 
 /// <summary>
-/// Location + forecast from two free, key-less services:
-/// ip-api.com (or ipapi.co as fallback) for the position, Open-Meteo for the weather.
+/// Location + forecast from free, key-less services:
+/// ipwho.is / ipinfo.io / freeipapi.com / ip-api.com for the position,
+/// Open-Meteo for the weather.
+///
+/// Geolocation providers go down, rate-limit, or are blocked by a given network — measured on
+/// the reference machine, ip-api.com accepted the TCP connection but never sent an HTTP
+/// response, and ipapi.co answered 403. A single hard-coded provider therefore left the widget
+/// stuck on "Locating…" until the HTTP timeout expired. Each provider now gets its own short
+/// timeout and the list is walked in order.
 /// </summary>
 public sealed class WeatherService
 {
     private static readonly HttpClient Http = CreateClient();
 
+    /// <summary>
+    /// Per-request ceiling. Must stay short: a provider that accepts the connection and then
+    /// never answers would otherwise hold the whole locate chain for the full timeout. 6 s is
+    /// comfortably above the measured 0.2–1.1 s latency of the working providers.
+    /// </summary>
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(6);
+
+    /// <summary>Overall ceiling for the whole locate chain, so a dead network cannot spin.</summary>
+    private static readonly TimeSpan LocateBudget = TimeSpan.FromSeconds(20);
+
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        // The client-level timeout is a backstop only; each call passes its own linked token.
+        var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("SimpleWeather/0.1 (+https://open-meteo.com)");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         return client;
     }
 
-    // ------------------------------------------------------------- location
-
-    /// <summary>Resolves the current position from the public IP. City-level accuracy by design.</summary>
-    public async Task<GeoLocation> LocateAsync(CancellationToken ct)
+    /// <summary>
+    /// Issues one GET bounded by both the caller's token and <see cref="RequestTimeout"/>, so a
+    /// provider that hangs mid-response cannot stall the chain.
+    /// </summary>
+    private static async Task<string> GetStringAsync(string url, CancellationToken ct)
     {
-        Exception? primary = null;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(RequestTimeout);
 
         try
         {
-            return await LocateViaIpApiAsync(ct).ConfigureAwait(false);
+            return await Http.GetStringAsync(url, timeout.Token).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            primary = ex;
-        }
-
-        try
-        {
-            return await LocateViaIpApiCoAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            throw new WeatherException($"{primary?.Message} / {ex.Message}", ex);
+            // Distinguish "this provider was too slow" from "the caller cancelled the refresh".
+            throw new TimeoutException($"no response within {RequestTimeout.TotalSeconds:0}s");
         }
     }
 
+    // ------------------------------------------------------------- location
+
+    /// <summary>
+    /// Resolves the current position from the public IP, trying every provider in turn.
+    /// City-level accuracy by design. Throws only when all providers fail.
+    /// </summary>
+    public async Task<GeoLocation> LocateAsync(CancellationToken ct)
+    {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(LocateBudget);
+
+        var failures = new List<string>();
+
+        // Ordered by measured latency and reliability on the reference machine. Providers that
+        // need no API key and return a country name directly come first.
+        (string Name, Func<CancellationToken, Task<GeoLocation>> Call)[] providers =
+        [
+            ("ipwho.is", LocateViaIpWhoIsAsync),
+            ("ipinfo.io", LocateViaIpInfoAsync),
+            ("freeipapi.com", LocateViaFreeIpApiAsync),
+            ("ip-api.com", LocateViaIpApiAsync),
+            ("ipapi.co", LocateViaIpApiCoAsync),
+        ];
+
+        foreach (var (name, call) in providers)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                var location = await call(budget.Token).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
+                Log.Verbose($"locate ok via {name}: {location.DisplayName}");
+                return location;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // Either this provider hit RequestTimeout or the whole locate budget ran out.
+                failures.Add($"{name}: timed out");
+                if (budget.IsCancellationRequested) break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failures.Add($"{name}: {ex.Message}");
+            }
+        }
+
+        throw new WeatherException("all location providers failed — " + string.Join("; ", failures));
+    }
+
+    /// <summary>https://ipwho.is — returns the country name directly; no key required.</summary>
+    private static async Task<GeoLocation> LocateViaIpWhoIsAsync(CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(await GetStringAsync("https://ipwho.is/", ct).ConfigureAwait(false));
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("success", out var ok) && ok.ValueKind == JsonValueKind.False)
+        {
+            string message = root.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            throw new WeatherException($"ipwho.is: {message}");
+        }
+
+        return new GeoLocation(
+            Text(root, "city"),
+            Text(root, "region"),
+            Text(root, "country"),
+            Number(root, "latitude"),
+            Number(root, "longitude"),
+            TextOr(root, "auto", "timezone", "timezone.id"));
+    }
+
+    /// <summary>
+    /// https://ipinfo.io/json — free tier returns country as an ISO code ("MY"), so the label is
+    /// mapped when the code is known. City/region arrive separately.
+    /// </summary>
+    private static async Task<GeoLocation> LocateViaIpInfoAsync(CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(await GetStringAsync("https://ipinfo.io/json", ct).ConfigureAwait(false));
+        var root = doc.RootElement;
+
+        // "loc" carries "lat,lon" as a single string.
+        double lat = 0, lon = 0;
+        if (root.TryGetProperty("loc", out var loc) && loc.GetString() is { } pair)
+        {
+            var parts = pair.Split(',');
+            if (parts.Length == 2)
+            {
+                _ = double.TryParse(parts[0], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out lat);
+                _ = double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out lon);
+            }
+        }
+
+        return new GeoLocation(
+            Text(root, "city"),
+            Text(root, "region"),
+            CountryName(Text(root, "country")),
+            lat,
+            lon,
+            TextOr(root, "auto", "timezone"));
+    }
+
+    /// <summary>https://freeipapi.com/api/json — returns a country name; no key required.</summary>
+    private static async Task<GeoLocation> LocateViaFreeIpApiAsync(CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(
+            await GetStringAsync("https://freeipapi.com/api/json", ct).ConfigureAwait(false));
+        var root = doc.RootElement;
+
+        return new GeoLocation(
+            Text(root, "cityName", "city"),
+            Text(root, "regionName", "region"),
+            Text(root, "countryName", "country"),
+            Number(root, "latitude"),
+            Number(root, "longitude"),
+            TextOr(root, "auto", "timeZone", "timezone"));
+    }
+
+    /// <summary>Legacy provider, kept last: free tier is HTTP-only and has been unreliable.</summary>
     private static async Task<GeoLocation> LocateViaIpApiAsync(CancellationToken ct)
     {
         // ip-api's free tier is HTTP-only; asking for HTTPS returns 403.
         string lang = Loc.IsChinese ? "zh-CN" : "en";
         string url = "http://ip-api.com/json/?fields=status,message,country,regionName,city,lat,lon,timezone&lang=" + lang;
 
-        using var doc = JsonDocument.Parse(await Http.GetStringAsync(url, ct).ConfigureAwait(false));
+        using var doc = JsonDocument.Parse(await GetStringAsync(url, ct).ConfigureAwait(false));
         var root = doc.RootElement;
 
         if (root.TryGetProperty("status", out var status) && status.GetString() != "success")
@@ -119,28 +251,90 @@ public sealed class WeatherService
         }
 
         return new GeoLocation(
-            root.TryGetProperty("city", out var city) ? city.GetString() ?? "" : "",
-            root.TryGetProperty("regionName", out var region) ? region.GetString() ?? "" : "",
-            root.TryGetProperty("country", out var country) ? country.GetString() ?? "" : "",
-            root.GetProperty("lat").GetDouble(),
-            root.GetProperty("lon").GetDouble(),
-            root.TryGetProperty("timezone", out var tz) ? tz.GetString() ?? "auto" : "auto");
+            Text(root, "city"),
+            Text(root, "regionName"),
+            Text(root, "country"),
+            Number(root, "lat"),
+            Number(root, "lon"),
+            TextOr(root, "auto", "timezone"));
     }
 
+    /// <summary>Legacy provider, kept last: measured 403 on the reference network.</summary>
     private static async Task<GeoLocation> LocateViaIpApiCoAsync(CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(
-            await Http.GetStringAsync("https://ipapi.co/json/", ct).ConfigureAwait(false));
+            await GetStringAsync("https://ipapi.co/json/", ct).ConfigureAwait(false));
         var root = doc.RootElement;
 
         return new GeoLocation(
-            root.TryGetProperty("city", out var city) ? city.GetString() ?? "" : "",
-            root.TryGetProperty("region", out var region) ? region.GetString() ?? "" : "",
-            root.TryGetProperty("country_name", out var country) ? country.GetString() ?? "" : "",
-            root.GetProperty("latitude").GetDouble(),
-            root.GetProperty("longitude").GetDouble(),
-            root.TryGetProperty("timezone", out var tz) ? tz.GetString() ?? "auto" : "auto");
+            Text(root, "city"),
+            Text(root, "region"),
+            Text(root, "country_name"),
+            Number(root, "latitude"),
+            Number(root, "longitude"),
+            TextOr(root, "auto", "timezone"));
     }
+
+    // ------------------------------------------------- provider field helpers
+
+    /// <summary>First present, non-empty JSON string among <paramref name="names"/>.</summary>
+    private static string Text(JsonElement root, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                string? s = value.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>Like <see cref="Text"/>, but falls back when every field is missing or empty.</summary>
+    private static string TextOr(JsonElement root, string fallback, params string[] names)
+    {
+        string value = Text(root, names);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    /// <summary>Numeric field lookup that tolerates a provider returning it as a string.</summary>
+    private static double Number(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value)) return 0;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number => value.GetDouble(),
+            JsonValueKind.String when double.TryParse(value.GetString(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double parsed) => parsed,
+            _ => 0,
+        };
+    }
+
+    /// <summary>
+    /// ipinfo.io's free tier reports an ISO 3166-1 alpha-2 country code. Only the codes worth
+    /// mapping for this widget's audience are listed; anything else is shown as-is.
+    /// </summary>
+    private static string CountryName(string code) => code.ToUpperInvariant() switch
+    {
+        "MY" => "Malaysia",
+        "CN" => "China",
+        "SG" => "Singapore",
+        "TW" => "Taiwan",
+        "HK" => "Hong Kong",
+        "JP" => "Japan",
+        "KR" => "South Korea",
+        "US" => "United States",
+        "GB" => "United Kingdom",
+        "AU" => "Australia",
+        "CA" => "Canada",
+        "DE" => "Germany",
+        "FR" => "France",
+        _ => code,
+    };
 
     /// <summary>City lookup backed by Open-Meteo's geocoding API, used by the settings window.</summary>
     public async Task<IReadOnlyList<GeoLocation>> SearchAsync(string query, CancellationToken ct)
@@ -152,7 +346,7 @@ public sealed class WeatherService
                      + "&name=" + Uri.EscapeDataString(query.Trim())
                      + "&language=" + lang;
 
-        using var doc = JsonDocument.Parse(await Http.GetStringAsync(url, ct).ConfigureAwait(false));
+        using var doc = JsonDocument.Parse(await GetStringAsync(url, ct).ConfigureAwait(false));
         if (!doc.RootElement.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
             return [];
 
@@ -188,7 +382,7 @@ public sealed class WeatherService
                      + "&daily=weather_code,temperature_2m_max,temperature_2m_min"
                      + "&timezone=auto&forecast_days=" + ForecastDays;
 
-        using var doc = JsonDocument.Parse(await Http.GetStringAsync(url, ct).ConfigureAwait(false));
+        using var doc = JsonDocument.Parse(await GetStringAsync(url, ct).ConfigureAwait(false));
         var root = doc.RootElement;
 
         var current = root.GetProperty("current");
