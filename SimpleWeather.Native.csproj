@@ -9,10 +9,10 @@
     <AssemblyName>Simple Weather</AssemblyName>
     <RootNamespace>SimpleWeather</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Product>Simple Weather</Product>
     <Company>Bohang</Company>
-    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <ApplicationIcon>$(MSBuildProjectDirectory)\..\..\logo.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <InvariantGlobalization>false</InvariantGlobalization>
 
@@ -38,13 +38,13 @@
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
 
-  <!-- The application icon sits next to the sources, so this folder builds on its own.
-       ApplicationIcon stamps it onto the executable (which is also what gives every window its
-       title-bar icon, since Windows falls back to the module icon) and EmbeddedResource packs the
-       same frames so the About box can draw the logo at 64px. -->
+  <!-- The application icon lives at the repository root, so it is linked rather than copied: one
+       file, no duplicate to keep in sync. ApplicationIcon stamps it onto the executable (which is
+       also what gives every window its title-bar icon, since Windows falls back to the module icon)
+       and EmbeddedResource packs the same frames so the About box can draw the logo at 64px. -->
   <ItemGroup>
-    <None Include="logo.ico" />
-    <EmbeddedResource Include="logo.ico" />
+    <None Include="$(MSBuildProjectDirectory)\..\..\logo.ico" Link="logo.ico" />
+    <EmbeddedResource Include="$(MSBuildProjectDirectory)\..\..\logo.ico" Link="logo.ico" />
   </ItemGroup>
 
 </Project>

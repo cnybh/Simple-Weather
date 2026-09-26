@@ -372,7 +372,7 @@ internal sealed class AboutWindow : IDisposable
 
     /// <summary>
     /// Version, read from the assembly rather than written down, so the box cannot drift from the
-    /// build. <c>Version</c> in the project file is 1.0.1.
+    /// build. <c>Version</c> in the project file is 1.0.2.
     /// </summary>
     internal static string ProductVersion
     {
